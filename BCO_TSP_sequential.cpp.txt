@@ -1,0 +1,160 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <algorithm>
+#include <random>
+#include <chrono>
+#include <climits>
+#include <iomanip>
+
+using namespace std;
+
+struct Bee {
+    char behavior; // 'F' for collector, 'O' for observer, 'S' for scout
+    vector<int> route;
+    float distance;
+    int iterator;
+};
+
+// Global variables
+vector<int> bestSolution;
+float shortestDistance = (float)INT_MAX;
+int mutationLimit;
+int numberOfBees;
+int collectorPercentage;
+int observerPercentage;
+int scoutPercentage;
+int cycles;
+vector<vector<float>> distanceArray;
+
+float calculateDistance(const vector<int>& route, const vector<vector<float>>& distances) {
+    float distance = 0;
+    for (int i = 0; i < route.size() - 1; ++i) {
+        distance += distances[route[i]][route[i + 1]];
+    }
+    distance += distances[route.back()][route[0]];  // Return to the starting city
+    return distance;
+}
+
+vector<int> mutatePath(Bee* bee) {
+    random_device rd;
+    mt19937 mt(rd());
+    uniform_int_distribution<int> distrib(1, bee->route.size() - 2); // Exclude the first and last cities
+
+    int pointToSwap = distrib(mt);
+
+    vector<int> mutated = bee->route;
+
+    int temp = mutated[pointToSwap];
+    mutated[pointToSwap] = mutated[pointToSwap + 1];
+    mutated[pointToSwap + 1] = temp;
+
+    return mutated;
+}
+
+void scout(Bee* bee) {
+    vector<int> mutated = mutatePath(bee);
+    float newLength = calculateDistance(mutated, distanceArray);
+
+    if (newLength < bee->distance) {
+        bee->route = mutated;
+        bee->distance = newLength;
+        bee->iterator = 0;
+    }
+    else {
+        if (bee->iterator >= mutationLimit) {
+            bee->behavior = 'S';
+        }
+        else {
+            bee->iterator++;
+        }
+    }
+}
+
+void findNewPath(Bee& bee) {
+    unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+    shuffle(bee.route.begin() + 1, bee.route.end() - 1, default_random_engine(seed)); // Exclude the first and last cities
+    bee.distance = calculateDistance(bee.route, distanceArray);
+    bee.iterator = 0;
+    bee.behavior = 'F';
+}
+
+bool sorting(const vector<float>& a, const vector<float>& b) {
+    return a[1] > b[1];
+}
+
+vector<int> copyBestRoute(const Bee& bee) {
+    return bee.route;
+}
+
+void dance(vector<Bee>& bees) {
+    vector<vector<float>> currentSolutions;
+
+    for (int i = 0; i < bees.size(); i++) {
+        if (bees[i].behavior == 'F') {
+            scout(&bees[i]);
+            if (shortestDistance > bees[i].distance) {
+                bestSolution = copyBestRoute(bees[i]);
+                shortestDistance = bees[i].distance;
+                cout << endl << "New best route bee collector id: " << i << "\t\t\t[F]";
+            }
+
+            currentSolutions.push_back({ static_cast<float>(i), bees[i].distance });
+        }
+        else if (bees[i].behavior == 'S') {
+            findNewPath(bees[i]);
+        }
+    }
+}
+
+int main() {
+    ifstream inputFile("distances.txt");
+    if (!inputFile) {
+        cerr << "Error opening file!" << endl;
+        return 1;
+    }
+
+    int numCities;
+    inputFile >> numCities;
+
+    distanceArray.resize(numCities, vector<float>(numCities));
+
+    for (int i = 0; i < numCities; ++i) {
+        for (int j = 0; j < numCities; ++j) {
+            inputFile >> distanceArray[i][j];
+        }
+    }
+
+    mutationLimit = 100; // Example value, adjust as needed
+    numberOfBees = 2000; // Example value, adjust as needed
+    collectorPercentage = 40; // Example value, adjust as needed
+    observerPercentage = 60; // Example value, adjust as needed
+    scoutPercentage = 20; // Example value, adjust as needed
+    cycles = 500; // Example value, adjust as needed
+
+    vector<Bee> bees(numberOfBees);
+    for (int i = 0; i < numberOfBees; ++i) {
+        bees[i].route.resize(numCities);
+        for (int j = 0; j < numCities; ++j) {
+            bees[i].route[j] = j;
+        }
+        random_shuffle(bees[i].route.begin() + 1, bees[i].route.end() - 1); // Shuffle the cities except the first and last ones
+        bees[i].distance = calculateDistance(bees[i].route, distanceArray);
+        bees[i].behavior = 'F';
+    }
+
+    for (int i = 0; i < cycles; ++i) {
+        dance(bees);
+    }
+
+    cout << endl << "Shortest route found:" << endl;
+    for (auto city : bestSolution) {
+        cout << (city+1) << " -> ";
+    }
+    cout << bestSolution[0]+1 << endl; // Returning to the starting city
+
+    cout << "Length of shortest possible tour: " << fixed << setprecision(2) << shortestDistance << endl;
+
+    return 0;
+}
+

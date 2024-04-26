@@ -1,0 +1,10 @@
+all: 1 2
+1:	BCO_TSP_sequential.cpp
+	g++ BCO_TSP_sequential.cpp -o seq
+
+
+2: 	BCO_TSP_parallel.cpp
+	g++ -fopenmp BCO_TSP_parallel.cpp -o parallel
+
+clean:
+	rm parallel seq
